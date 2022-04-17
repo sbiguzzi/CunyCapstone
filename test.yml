@@ -1,0 +1,20 @@
+..generic:
+  git2rdata: 0.4.0
+  optimize: yes
+  NA string: NA
+  hash: 79700c68bbf867efdefad3a89ca5790a02ffd729
+  data_hash: a24358e76fedb079054bb460c5b51f7a6e526c78
+season:
+  class: integer
+league:
+  class: character
+date:
+  class: character
+score1:
+  class: integer
+score2:
+  class: integer
+team1:
+  class: character
+team2:
+  class: character
