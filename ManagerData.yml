@@ -1,0 +1,24 @@
+..generic:
+  git2rdata: 0.4.0
+  optimize: yes
+  NA string: NA
+  sorting:
+  - date
+  - team1
+  - manager
+  hash: ce615c1f487d71a9e544a89c241c43dccceb83bf
+  data_hash: ae4b68e30ae4c303d23ae3437ee87a4d38121ec7
+date:
+  class: character
+team1:
+  class: character
+team2:
+  class: character
+g1:
+  class: integer
+g2:
+  class: integer
+manager:
+  class: character
+manager_team:
+  class: character
