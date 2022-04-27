@@ -23790,8 +23790,6 @@ date_char,team1,team2,g1,g2,manager,manager_team
 4/27/2022,Bologna,Inter Milan,,,Simone Inzaghi,Inter Milan
 4/27/2022,Fiorentina,Udinese,,,Vincenzo Italiano,Fiorentina
 4/27/2022,Fiorentina,Udinese,,,Gabriele Cioffi,Udinese
-5/5/2022,Salernitana,Venezia,,,Davide Nicola,Salernitana
-5/5/2022,Salernitana,Venezia,,,Paolo Zanetti,Venezia
 4/30/2022,Cagliari,Hellas Verona,,,Walter Mazzarri,Cagliari
 4/30/2022,Cagliari,Hellas Verona,,,Igor Tudor,Hellas Verona
 4/30/2022,Napoli,Sassuolo,,,Luciano Spalletti,Napoli
@@ -23812,46 +23810,48 @@ date_char,team1,team2,g1,g2,manager,manager_team
 5/1/2022,Udinese,Inter Milan,,,Gabriele Cioffi,Udinese
 5/2/2022,Atalanta,Salernitana,,,Gian Piero Gasperini,Atalanta
 5/2/2022,Atalanta,Salernitana,,,Davide Nicola,Salernitana
-5/8/2022,Fiorentina,Roma,,,Vincenzo Italiano,Fiorentina
-5/8/2022,Fiorentina,Roma,,,José Mourinho,Roma
-5/8/2022,Genoa,Juventus,,,Alexander Blessin,Genoa
-5/8/2022,Genoa,Juventus,,,Massimiliano Allegri,Juventus
+5/5/2022,Salernitana,Venezia,,,Davide Nicola,Salernitana
+5/5/2022,Salernitana,Venezia,,,Paolo Zanetti,Venezia
+5/6/2022,Genoa,Juventus,,,Alexander Blessin,Genoa
+5/6/2022,Genoa,Juventus,,,Massimiliano Allegri,Juventus
+5/6/2022,Inter Milan,Empoli,,,Aurelio Andreazzoli,Empoli
+5/6/2022,Inter Milan,Empoli,,,Simone Inzaghi,Inter Milan
+5/7/2022,Lazio,Sampdoria,,,Maurizio Sarri,Lazio
+5/7/2022,Lazio,Sampdoria,,,Marco Giampaolo,Sampdoria
+5/7/2022,Sassuolo,Udinese,,,Alessio Dionisi,Sassuolo
+5/7/2022,Sassuolo,Udinese,,,Gabriele Cioffi,Udinese
+5/7/2022,Torino,Napoli,,,Luciano Spalletti,Napoli
+5/7/2022,Torino,Napoli,,,Ivan Juric,Torino
 5/8/2022,Hellas Verona,Milan,,,Igor Tudor,Hellas Verona
 5/8/2022,Hellas Verona,Milan,,,Stefano Pioli,Milan
-5/8/2022,Inter Milan,Empoli,,,Aurelio Andreazzoli,Empoli
-5/8/2022,Inter Milan,Empoli,,,Simone Inzaghi,Inter Milan
-5/8/2022,Lazio,Sampdoria,,,Maurizio Sarri,Lazio
-5/8/2022,Lazio,Sampdoria,,,Marco Giampaolo,Sampdoria
 5/8/2022,Salernitana,Cagliari,,,Walter Mazzarri,Cagliari
 5/8/2022,Salernitana,Cagliari,,,Davide Nicola,Salernitana
-5/8/2022,Sassuolo,Udinese,,,Alessio Dionisi,Sassuolo
-5/8/2022,Sassuolo,Udinese,,,Gabriele Cioffi,Udinese
 5/8/2022,Spezia,Atalanta,,,Gian Piero Gasperini,Atalanta
 5/8/2022,Spezia,Atalanta,,,Thiago Motta,Spezia
-5/8/2022,Torino,Napoli,,,Luciano Spalletti,Napoli
-5/8/2022,Torino,Napoli,,,Ivan Juric,Torino
 5/8/2022,Venezia,Bologna,,,Sinisa Mihajlovic,Bologna
 5/8/2022,Venezia,Bologna,,,Paolo Zanetti,Venezia
+5/9/2022,Fiorentina,Roma,,,Vincenzo Italiano,Fiorentina
+5/9/2022,Fiorentina,Roma,,,José Mourinho,Roma
+5/14/2022,Empoli,Salernitana,,,Aurelio Andreazzoli,Empoli
+5/14/2022,Empoli,Salernitana,,,Davide Nicola,Salernitana
+5/14/2022,Hellas Verona,Torino,,,Igor Tudor,Hellas Verona
+5/14/2022,Hellas Verona,Torino,,,Ivan Juric,Torino
+5/14/2022,Roma,Venezia,,,José Mourinho,Roma
+5/14/2022,Roma,Venezia,,,Paolo Zanetti,Venezia
+5/14/2022,Udinese,Spezia,,,Thiago Motta,Spezia
+5/14/2022,Udinese,Spezia,,,Gabriele Cioffi,Udinese
 5/15/2022,Bologna,Sassuolo,,,Sinisa Mihajlovic,Bologna
 5/15/2022,Bologna,Sassuolo,,,Alessio Dionisi,Sassuolo
 5/15/2022,Cagliari,Inter Milan,,,Walter Mazzarri,Cagliari
 5/15/2022,Cagliari,Inter Milan,,,Simone Inzaghi,Inter Milan
-5/15/2022,Empoli,Salernitana,,,Aurelio Andreazzoli,Empoli
-5/15/2022,Empoli,Salernitana,,,Davide Nicola,Salernitana
-5/15/2022,Hellas Verona,Torino,,,Igor Tudor,Hellas Verona
-5/15/2022,Hellas Verona,Torino,,,Ivan Juric,Torino
-5/15/2022,Juventus,Lazio,,,Massimiliano Allegri,Juventus
-5/15/2022,Juventus,Lazio,,,Maurizio Sarri,Lazio
 5/15/2022,Milan,Atalanta,,,Gian Piero Gasperini,Atalanta
 5/15/2022,Milan,Atalanta,,,Stefano Pioli,Milan
 5/15/2022,Napoli,Genoa,,,Alexander Blessin,Genoa
 5/15/2022,Napoli,Genoa,,,Luciano Spalletti,Napoli
-5/15/2022,Roma,Venezia,,,José Mourinho,Roma
-5/15/2022,Roma,Venezia,,,Paolo Zanetti,Venezia
-5/15/2022,Sampdoria,Fiorentina,,,Vincenzo Italiano,Fiorentina
-5/15/2022,Sampdoria,Fiorentina,,,Marco Giampaolo,Sampdoria
-5/15/2022,Udinese,Spezia,,,Thiago Motta,Spezia
-5/15/2022,Udinese,Spezia,,,Gabriele Cioffi,Udinese
+5/16/2022,Juventus,Lazio,,,Massimiliano Allegri,Juventus
+5/16/2022,Juventus,Lazio,,,Maurizio Sarri,Lazio
+5/16/2022,Sampdoria,Fiorentina,,,Vincenzo Italiano,Fiorentina
+5/16/2022,Sampdoria,Fiorentina,,,Marco Giampaolo,Sampdoria
 5/22/2022,Atalanta,Empoli,,,Gian Piero Gasperini,Atalanta
 5/22/2022,Atalanta,Empoli,,,Aurelio Andreazzoli,Empoli
 5/22/2022,Fiorentina,Juventus,,,Vincenzo Italiano,Fiorentina
