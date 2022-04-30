@@ -23801,7 +23801,7 @@ date_char,team1,team2,g1,g2,manager,manager_team
 5/1/2022,Empoli,Torino,,,Aurelio Andreazzoli,Empoli
 5/1/2022,Empoli,Torino,,,Ivan Juric,Torino
 5/1/2022,Juventus,Venezia,,,Massimiliano Allegri,Juventus
-,,,,,,
+5/1/2022,Juventus,Venezia,,,Andrea Soncin,Venezia
 5/1/2022,Milan,Fiorentina,,,Vincenzo Italiano,Fiorentina
 5/1/2022,Milan,Fiorentina,,,Stefano Pioli,Milan
 5/1/2022,Roma,Bologna,,,Sinisa Mihajlovic,Bologna
@@ -23811,7 +23811,7 @@ date_char,team1,team2,g1,g2,manager,manager_team
 5/2/2022,Atalanta,Salernitana,,,Gian Piero Gasperini,Atalanta
 5/2/2022,Atalanta,Salernitana,,,Davide Nicola,Salernitana
 5/5/2022,Salernitana,Venezia,,,Davide Nicola,Salernitana
-,,,,,,
+5/5/2022,Salernitana,Venezia,,,Andrea Soncin,Venezia
 5/6/2022,Genoa,Juventus,,,Alexander Blessin,Genoa
 5/6/2022,Genoa,Juventus,,,Massimiliano Allegri,Juventus
 5/6/2022,Inter Milan,Empoli,,,Aurelio Andreazzoli,Empoli
@@ -23829,7 +23829,7 @@ date_char,team1,team2,g1,g2,manager,manager_team
 5/8/2022,Spezia,Atalanta,,,Gian Piero Gasperini,Atalanta
 5/8/2022,Spezia,Atalanta,,,Thiago Motta,Spezia
 5/8/2022,Venezia,Bologna,,,Sinisa Mihajlovic,Bologna
-,,,,,,
+5/8/2022,Venezia,Bologna,,,Andrea Soncin,Venezia
 5/9/2022,Fiorentina,Roma,,,Vincenzo Italiano,Fiorentina
 5/9/2022,Fiorentina,Roma,,,José Mourinho,Roma
 5/14/2022,Empoli,Salernitana,,,Aurelio Andreazzoli,Empoli
@@ -23837,7 +23837,7 @@ date_char,team1,team2,g1,g2,manager,manager_team
 5/14/2022,Hellas Verona,Torino,,,Igor Tudor,Hellas Verona
 5/14/2022,Hellas Verona,Torino,,,Ivan Juric,Torino
 5/14/2022,Roma,Venezia,,,José Mourinho,Roma
-,,,,,,
+5/14/2022,Roma,Venezia,,,Andrea Soncin,Venezia
 5/14/2022,Udinese,Spezia,,,Thiago Motta,Spezia
 5/14/2022,Udinese,Spezia,,,Gabriele Cioffi,Udinese
 5/15/2022,Bologna,Sassuolo,,,Sinisa Mihajlovic,Bologna
@@ -23871,4 +23871,75 @@ date_char,team1,team2,g1,g2,manager,manager_team
 5/22/2022,Torino,Roma,,,José Mourinho,Roma
 5/22/2022,Torino,Roma,,,Ivan Juric,Torino
 5/22/2022,Venezia,Cagliari,,,Walter Mazzarri,Cagliari
+5/22/2022,Venezia,Cagliari,,,Andrea Soncin,Venezia
 ,,,,,,
+,,,,,,
+,,,,,,
+,,,,,,
+,,,,,,
+23-Apr-22,Como U19,Venezia U19,2,1,Andrea Soncin,Venezia U19
+20-Apr-22,Parma U19,Venezia U19,0,4,Andrea Soncin,Venezia U19
+16-Apr-22,Venezia U19,Monza U19,0,1,Andrea Soncin,Venezia U19
+9-Apr-22,Vicenza U19,Venezia U19,0,5,Andrea Soncin,Venezia U19
+2-Apr-22,Venezia U19,Pordenone U19,7,0,Andrea Soncin,Venezia U19
+19-Mar-22,Venezia U19,Alessandria U19,5,1,Andrea Soncin,Venezia U19
+5-Mar-22,Cittadella U19,Venezia U19,1,3,Andrea Soncin,Venezia U19
+26-Feb-22,Venezia U19,Udinese U19,4,0,Andrea Soncin,Venezia U19
+19-Feb-22,Reggiana U19,Venezia U19,0,1,Andrea Soncin,Venezia U19
+12-Feb-22,Venezia U19,Brescia U19,2,0,Andrea Soncin,Venezia U19
+5-Feb-22,Venezia U19,Entella U19,3,0,Andrea Soncin,Venezia U19
+29-Jan-22,Cremonese U19,Venezia U19,3,2,Andrea Soncin,Venezia U19
+18-Dec-21,Venezia U19,Como U19,0,0,Andrea Soncin,Venezia U19
+15-Dec-21,Venezia U19,Parma U19,0,1,Andrea Soncin,Venezia U19
+11-Dec-21,Monza U19,Venezia U19,2,1,Andrea Soncin,Venezia U19
+4-Dec-21,Venezia U19,Vicenza U19,5,0,Andrea Soncin,Venezia U19
+27-Nov-21,Pordenone U19,Venezia U19,1,1,Andrea Soncin,Venezia U19
+6-Nov-21,Alessandria U19,Venezia U19,1,1,Andrea Soncin,Venezia U19
+23-Oct-21,Venezia U19,Cittadella U19,1,1,Andrea Soncin,Venezia U19
+16-Oct-21,Udinese U19,Venezia U19,4,1,Andrea Soncin,Venezia U19
+2-Oct-21,Venezia U19,Reggiana U19,7,0,Andrea Soncin,Venezia U19
+25-Sep-21,Brescia U19,Venezia U19,2,2,Andrea Soncin,Venezia U19
+18-Sep-21,Entella U19,Venezia U19,1,7,Andrea Soncin,Venezia U19
+11-Sep-21,Venezia U19,Cremonese U19,0,0,Andrea Soncin,Venezia U19
+16-Feb-20,Venezia U17,Bologna U17,1,3,Andrea Soncin,Venezia Under 17
+9-Feb-20,Cremonese U17,Venezia U17,3,1,Andrea Soncin,Venezia Under 17
+2-Feb-20,Pordenone U17,Venezia U17,1,1,Andrea Soncin,Venezia Under 17
+26-Jan-20,Venezia U17,Atalanta U17,0,5,Andrea Soncin,Venezia Under 17
+19-Jan-20,SPAL U17,Venezia U17,5,0,Andrea Soncin,Venezia Under 17
+12-Jan-20,Venezia U17,Milan U17,0,1,Andrea Soncin,Venezia Under 17
+15-Dec-19,Venezia U17,Hellas U17,0,1,Andrea Soncin,Venezia Under 17
+8-Dec-19,Brescia U17,Venezia U17,6,2,Andrea Soncin,Venezia Under 17
+1-Dec-19,Venezia U17,Cittadella U17,0,0,Andrea Soncin,Venezia Under 17
+27-Nov-19,Udinese U17,Venezia U17,1,1,Andrea Soncin,Venezia Under 17
+10-Nov-19,Venezia U17,Cagliari U17,0,1,Andrea Soncin,Venezia Under 17
+3-Nov-19,Inter U17,Venezia U17,3,1,Andrea Soncin,Venezia Under 17
+27-Oct-19,Venezia U17,Chievo U17,0,3,Andrea Soncin,Venezia Under 17
+13-Oct-19,Bologna U17,Venezia U17,0,1,Andrea Soncin,Venezia Under 17
+6-Oct-19,Venezia U17,Cremonese U17,2,1,Andrea Soncin,Venezia Under 17
+29-Sep-19,Venezia U17,Pordenone U17,1,0,Andrea Soncin,Venezia Under 17
+22-Sep-19,Atalanta U17,Venezia U17,5,0,Andrea Soncin,Venezia Under 17
+15-Sep-19,Venezia U17,SPAL U17,0,0,Andrea Soncin,Venezia Under 17
+8-Sep-19,Milan U17,Venezia U17,2,0,Andrea Soncin,Venezia Under 17
+25-Apr-19,Hellas U17,Venezia U17,3,1,Andrea Soncin,Venezia Under 17
+14-Apr-19,Venezia U17,Bologna U17,2,1,Andrea Soncin,Venezia Under 17
+7-Apr-19,Brescia U17,Venezia U17,2,3,Andrea Soncin,Venezia Under 17
+4-Apr-19,Venezia U17,Inter U17,2,2,Andrea Soncin,Venezia Under 17
+3-Mar-19,Padova U17,Venezia U17,0,1,Andrea Soncin,Venezia Under 17
+23-Feb-19,Venezia U17,Chievo U17,1,2,Andrea Soncin,Venezia Under 17
+17-Feb-19,Udinese U17,Venezia U17,2,1,Andrea Soncin,Venezia Under 17
+10-Feb-19,Venezia U17,Cagliari U17,2,1,Andrea Soncin,Venezia Under 17
+3-Feb-19,Cittadella U17,Venezia U17,1,2,Andrea Soncin,Venezia Under 17
+27-Jan-19,Venezia U17,Milan U17,0,4,Andrea Soncin,Venezia Under 17
+20-Jan-19,SPAL U17,Venezia U17,2,1,Andrea Soncin,Venezia Under 17
+12-Jan-19,Venezia U17,Atalanta U17,0,2,Andrea Soncin,Venezia Under 17
+16-Dec-18,Venezia U17,Hellas U17,0,1,Andrea Soncin,Venezia Under 17
+9-Dec-18,Bologna U17,Venezia U17,1,0,Andrea Soncin,Venezia Under 17
+2-Dec-18,Venezia U17,Brescia U17,2,0,Andrea Soncin,Venezia Under 17
+18-Nov-18,Inter U17,Venezia U17,4,1,Andrea Soncin,Venezia Under 17
+4-Nov-18,Venezia U17,Padova U17,3,2,Andrea Soncin,Venezia Under 17
+28-Oct-18,Chievo U17,Venezia U17,6,0,Andrea Soncin,Venezia Under 17
+14-Oct-18,Venezia U17,Udinese U17,1,1,Andrea Soncin,Venezia Under 17
+7-Oct-18,Cagliari U17,Venezia U17,0,0,Andrea Soncin,Venezia Under 17
+30-Sep-18,Venezia U17,Cittadella U17,2,0,Andrea Soncin,Venezia Under 17
+23-Sep-18,Milan U17,Venezia U17,1,0,Andrea Soncin,Venezia Under 17
+16-Sep-18,Venezia U17,SPAL U17,0,2,Andrea Soncin,Venezia Under 17
