@@ -1,0 +1,1470 @@
+---
+title             : "Predicting Serie A Game Outcomes"
+shorttitle        : "Using Poisson regression to predict goals and simulate game outcomes"
+
+author: 
+  - name          : "Biguzzi-Velcich, Stefano"
+    affiliation   : "1"
+    corresponding : yes    # Define only one corresponding author
+    address       : 
+    email         : "stefano.biguzzivelcich14@spsmail.cuny.edu"
+
+
+affiliation:
+  - id            : "1"
+    institution   : "City-University-of-New-York-School-of-Professional-Studies"
+
+authornote: |
+
+abstract: |
+  Multiple studies have been conducted on predicting soccer matches, as well as, websites built to provide predictions; however, there is still room to further develop these processes by adding additional data points. The leading strategy to predict matches is to create a projected score for the home team and away team and utilize the projected score as the $\lambda$ in a Poisson distribution simulation for each team in that game. In this paper I attempt to refine the process of predicting matches by defining a new method to arrive at projected score. Whereas the projected score for websites like FiveThirtyEight uses data that is not free, this method employs only free data that can be scraped online. I then compare the FiveThirtyEight prediction results with my prediction results and determine if any advantage exists to my method of creating $\lambda$. The success rates for predicting correct outcomes for matches during the 2021-2022 Serie A season, up to and including match day 35, using the $\lambda$s  from FiveThirtyEight and this paper were 53% and 56% respectively. Within the method for this paper manager experience plays a small role in predicting matches, with most of the weight coming from the Off and Def team ratings. With the continual legalization of sports betting across the country and the dominance of football, basketball, and baseball in the sportsbooks, the ability to develop a process to predict soccer matches using free data and providing the calculations required to arrive at each $\lambda$, could increase the market for soccer betting in America. 
+  
+  
+keywords          : "data-science, sports, soccer, football, sports-betting, betting"
+wordcount         : "3,565"
+
+bibliography      : ["r-references.bib","CapstoneBibliography.bib"]
+appendix          :
+  - "appendix-1.rmd"
+
+floatsintext      : no
+figsintext        : no
+numbersections    : yes
+linenumbers       : true
+draft             : no
+mask              : no
+
+figurelist        : true
+tablelist         : true
+footnotelist      : no
+documentclass     : "apa6"
+classoption       : "doc"
+
+output            : papaja::apa6_pdf
+---
+```{r setup, include = F}
+
+knitr::opts_chunk$set(
+  echo = F, message = F, comment = NA, warning = F, fig.align = 'center')
+
+## Load libraries
+library(papaja)
+library(dplyr)
+options(dplyr.summarise.inform = FALSE)
+library(tidyr)
+library(tibble)
+library(knitr)
+library(kableExtra)
+library(caret)
+
+r_refs("r-references.bib")
+```
+```{r functions, include=F}
+## Negate function
+`%!in%` <- Negate(`%in%`)
+
+## Create function to get back regression metrics
+metric <- function(model,type){
+  
+  if(missing(type)){
+    resid <- model$residuals
+    ssr <- sum(resid^2)
+    sst <- sum((model$y-mean(model$y))^2)
+    
+    mse <- sum(resid^2)/nrow(model$data)
+    mae <- sum(abs(resid)/nrow(model$data))
+    rmse <- sqrt(sum(resid^2)/nrow(model$data))
+    r2 <- 1-(ssr/sst)
+    
+    metric <- c(mse,mae,rmse,r2)
+    names(metric) <- c("MSE","MAE","RMSE","RSquared")
+  }
+  else{
+
+    if(type == "mae"){
+      resid <- model$residuals
+      metric <- sum(abs(resid)/nrow(model$data))
+    }
+    
+    if(type == "rmse"){
+      resid <- model$residuals
+      metric <- sqrt(sum(resid^2)/nrow(model$data))
+    }
+    
+    if(type == "r2"){
+      ssr <- sum(model$residuals^2)
+      sst <- sum((model$y-mean(model$y))^2)
+      metric <- 1-(ssr/sst)
+    }
+    
+    if(type == "mse"){
+      resid <- model$residuals
+      metric <- sum(resid^2)/nrow(model$data)
+    }
+      
+  }
+  
+  return(metric)
+}
+
+## function to predict outcomes
+proj_perc <- function(proj1,proj2,runs){
+
+  if(missing(runs)){
+    runs <- 10000
+  }
+  
+  sim_team1 <- rpois(runs,proj1)
+  sim_team2 <- rpois(runs,proj2)
+  
+  sim_df <- data.frame(
+    team1 = sim_team1,
+    team2 = sim_team2
+  ) %>%
+    mutate(
+      outcome = ifelse(sim_team1==sim_team2,"tie",
+                       ifelse(sim_team1>sim_team2,"win1","win2"))
+    ) %>%
+    group_by(outcome) %>%
+    summarise(
+      cnt = n()
+    ) %>%
+    mutate(
+      chance = cnt/sum(cnt)*100
+    ) %>%
+    remove_rownames() %>%
+    select(outcome,chance)
+  
+  tie <- sim_df[sim_df$outcome == "tie","chance"]
+  win1 <- sim_df[sim_df$outcome == "win1","chance"]
+  win2 <- sim_df[sim_df$outcome == "win2","chance"]
+  proj1 <- proj1
+  proj2 <- proj2
+  
+  proj_list <- c(proj1,proj2,win1,win2,tie)
+  names(proj_list) <- c("proj1","proj2","win1","win2","tie")
+
+ return(proj_list)
+}
+```
+
+```{r data-load}
+## Getting the 538 data
+spi_url <- "https://projects.fivethirtyeight.com/soccer-api/club/spi_matches.csv"
+spi.df <- read.csv(url(spi_url))
+spi <- spi.df %>%
+  filter(league_id %in% c(1854,1856)) %>%
+  select(season,league,date,team1,team2,score1,score2,spi1,spi2,xg1,xg2,nsxg1,nsxg2,adj_score1,adj_score2) %>%
+  filter(as.Date.character(date,format = "%Y-%m-%d")<="2022-05-02")
+
+## Load in the manager data
+manager_url <- "https://raw.githubusercontent.com/sbiguzzi/CunyCapstone/main/ManagerData.csv"
+manager.df <- read.csv(url(manager_url))
+
+## Load pre 538 data
+pre538_url <- "https://raw.githubusercontent.com/sbiguzzi/CunyCapstone/main/HistoricData.csv"
+pre538 <- read.csv(url(pre538_url))
+## Convert date_char to date
+pre538$date <- as.Date.character(pre538$date_char, format = "%d-%b-%y")
+
+## Spi preprocessing
+spi <- spi %>%
+  ## Renaming team names to my convention to work with other data frames
+  replace(. == "AC Milan", "Milan") %>%
+  replace(. == "AS Roma", "Roma") %>%
+  replace(. == "Internazionale", "Inter Milan") %>%
+  replace(. == "F.B.C Unione Venezia", "Venezia") %>%
+  replace(. == "Verona", "Hellas Verona") %>%
+  replace(. == "US Pescara", "Pescara") %>%
+  replace(. == "Spal", "SPAL") %>%
+  replace(. == "Pordenone Calcio", "Pordenone") %>%
+  ## Renaming league
+  replace(. == "Italy Serie A", "Serie A") %>%
+  replace(. == "Italy Serie B", "Serie B")
+
+## Filter out any Serie B playoff games
+current <- spi %>%
+  filter(season == max(season)) %>%
+  group_by(season,league) %>%
+  mutate(rownumber = cumsum(!is.na(season))) %>%
+  ungroup()
+
+historic <- spi %>%
+  filter(season != max(season)) %>%
+  group_by(season,league) %>%
+  mutate(rownumber = cumsum(!is.na(season))) %>%
+  mutate(filter = ifelse(league == 'Serie B',max(rownumber)-10,max(rownumber))) %>%
+  filter(rownumber <= filter) %>%
+  ungroup()
+
+spi <- rbind(current[2:ncol(current)-1],historic[,c(3:ncol(historic)-2)]) %>%
+  ## Converting character date to date
+  mutate(
+    date = as.Date.character(date,format = "%Y-%m-%d"),
+    ## Make spi rating a decimal
+    spi1 = spi1/100,
+    spi2 = spi2/100,
+    ## Creating additional columns
+    gameid = paste0(as.character(as.numeric(date)),"_",team1,"_",team2),
+    team1id = paste0(as.character(as.numeric(date)),"_",team1),
+    team2id = paste0(as.character(as.numeric(date)),"_",team2),
+    xg_t1 = (xg1+nsxg1+adj_score1)/3,
+    xg_t2 = (xg2+nsxg2+adj_score2)/3
+  )
+
+## Create manager.data
+manager.data <- manager.df %>%
+  mutate(
+    ## Recode date to date element
+    date = as.Date.character(manager.df$date_char,format="%m/%d/%Y"),
+    ## Create manager id column
+    managerid = paste0(as.character(as.numeric(date)),"_",manager_team),
+    ## set g1 to match when paper was written
+    g1 = ifelse(date>="2022-04-30",NA,g1),
+    ## set g2 to match when paper was written
+    g2 = ifelse(date>="2022-04-30",NA,g2)
+  ) %>%
+  filter(date<='2022-05-02') %>%
+  ## Select only relevant columns
+  select(date,team1,team2,g1,g2,manager,manager_team,managerid) %>%
+  group_by(manager) %>%
+  mutate(
+    ## figure out the goals scored by the manager team
+    gfor = ifelse(manager_team==team1,g1,g2),
+    ## figure out the goals allowed by the manager team
+    gaga = ifelse(manager_team==team1,g2,g1),
+    ## Add manager off career rating
+    m_off = cummean(gfor),
+    ## Add manager def career rating
+    m_def = cummean(gaga),
+    ## create a count of the number of games each manger has managed
+    games = row_number()
+  ) %>%
+  ungroup() %>%
+  ## Drop the goals scored and goals allowed columns
+  select(-c(gfor,gaga))
+
+## initiate final manager data frame
+manager <- distinct(manager.data[,c(1:5)]) %>%
+  ## Create id variables 
+  mutate(
+    ## Creating team1 id var
+    team1id = paste0(as.character(as.numeric(date)),"_",team1),
+    ## Creating team2 id var
+    team2id = paste0(as.character(as.numeric(date)),"_",team2)
+  ) %>%
+  ## Joining on team1 manager information
+  left_join(manager.data[,c(6,8:11)],by=c("team1id"="managerid")) %>%
+  ## Joining on team2 manager information
+  left_join(manager.data[,c(6,8:11)],by=c("team2id"="managerid")) %>%
+  mutate(
+    ## Create manager1 experience
+    m1_exp = games.x/(coalesce(games.x,0)+coalesce(games.y,0)),
+    ## Create manager2 experience
+    m2_exp = games.y/(coalesce(games.x,0)+coalesce(games.y,0)),
+    ## Create gameid column
+    gameid = paste0(as.character(as.numeric(date)),"_",team1,"_",team2)
+  )
+
+## Rename .x and .y columns with 1 and 2
+colnames(manager)[8:15] <- c("manager1", "m1_off", "m1_def", "m1_games",
+                             "manager2", "m2_off", "m2_def","m2_games")
+
+## Combine the game and manager data
+regression <- rbind(pre538[,c(1,2,8,4:7)],spi[,c(1:3,6,7,4,5)]) %>%
+  filter(date < '2022-04-30') %>%
+  mutate(
+    ## creating gameid column
+    gameid = paste0(as.character(as.numeric(date)),"_",team1,"_",team2),
+    ## season 1 id
+    season1id = paste0(as.character(season),"_",team1),
+    ## season 2 id
+    season2id = paste0(as.character(season),"_",team2)
+  ) %>%
+  ## Joining on game data
+  left_join(spi[,c(8,9,16,19:20)], by = "gameid") %>%
+  ## Joining on manager data
+  left_join(manager[,c(18,9:11,16,13:15,17)], by = "gameid") %>%
+  ## Adding specific metrics
+  arrange(league,date) %>%
+  group_by(league) %>%
+  mutate(
+    ## home advantage
+    # h_off = cummean(coalesce(score1,0))/cummean(coalesce(score2,0)),
+    home = cummean(coalesce(score1,0)),
+    ## away disadvantage
+    away = cummean(coalesce(score2,0)),
+    ## away disadvantage
+  ) %>%
+  ungroup() %>%
+  group_by(season,team1) %>%
+  mutate(
+    ## Home weight
+    h_row_off = row_number()/6,
+    ## home against weight
+    h_row_def = row_number()/6,
+    ## home advantage
+    h_off = cummean(coalesce(score1,0)),
+    ## away disadvantage
+    h_def = cummean(coalesce(score2,0))
+  ) %>%
+  ungroup() %>%
+  group_by(season,team2) %>%
+  mutate(
+    ## away weight
+    a_row_off = row_number()/6,
+    ## away def weight
+    a_row_def = row_number()/6,
+    ## home advantage
+    a_off = cummean(coalesce(score2,0)),
+    ## away disadvantage
+    a_def = cummean(coalesce(score1,0))
+  ) %>%
+  ungroup() %>%
+  mutate(
+    h_off = ifelse(h_row_off>1,h_off,(h_off*h_row_off)+(home*(1-h_row_off))),
+    h_def = ifelse(h_row_def>1,h_def,(h_def*h_row_def)+(away*(1-h_row_def))),
+    a_off = ifelse(a_row_off>1,a_off,(a_off*a_row_off)+(away*(1-a_row_off))),
+    a_def = ifelse(a_row_def>1,a_def,(a_def*a_row_def)+(home*(1-a_row_def))),
+  )
+
+## List of all serie a teams from 2015-2021
+seriea_teams <- c(
+  regression %>%
+    filter(league == "Serie A" & !is.na(score1)) %>%
+    select(season1id) %>%
+    rename(seasonid = season1id) %>%
+    distinct() %>%
+    arrange(seasonid)
+)$seasonid
+
+## Initial team data
+teamdata <- union(
+  ## Adding team 1 information
+  regression %>%
+    filter(!is.na(score1)) %>%
+    # filter(season != 2015 & league == "Serie A" & !is.na(score1)) %>%
+    select(season,league,date,season1id,score1,score2,xg_t1,xg_t2,team1,spi1,
+           m1_exp,m1_off,m2_def,h_off,h_def,home) %>%
+    rename(
+      seasonid = season1id, gfor = score1, gaga = score2, xgf = xg_t1,
+      xga = xg_t2, team = team1, spi = spi1, m_exp = m1_exp, m_off = m1_off,
+      m_def = m2_def, adj_off = h_off, adj_def = h_def, adv = home
+    ),
+  ## Adding team 2 information
+  regression %>%
+    filter(!is.na(score1)) %>%
+  # filter(season != 2015 & league == "Serie A" & !is.na(score2)) %>%
+    select(season,league,date,season2id,score1,score2,xg_t1,xg_t2,team2,spi2,
+           m2_exp,m2_off,m1_def,a_off,a_def, away) %>%
+    rename(
+      seasonid = season2id, gfor = score2, gaga = score1, xgf = xg_t1,
+      xga = xg_t2, team = team2, spi = spi2, m_exp = m2_exp, m_off = m2_off,
+      m_def = m1_def, adj_off = a_off, adj_def = a_def, adv = away
+    )
+  )
+
+## Create list of unique teams that were recently promoted
+promo_teams <- c(
+  regression %>%
+    filter(league == "Serie B",season != max(regression$season)) %>%
+    select(season,team1) %>%
+    rename(team=team1) %>%
+    mutate(
+      seasonid = paste0(as.character(season+1),"_",team),
+      promoid = paste0(as.character(season+2),"_",team)
+    ) %>%
+    select(seasonid,promoid) %>%
+    filter(seasonid %in% seriea_teams) %>%
+    distinct() %>%
+    add_row(seasonid = c("2015_Carpi","2015_Frosinone","2015_Bologna")) %>%
+    arrange(seasonid)
+)
+
+## Adjust list to show only teams in Serie A for multiple years
+promo_teams$promoid <- promo_teams$promoid[promo_teams$promoid %in% seriea_teams]
+
+## Season adjustments for newly promoted teams
+season_adj <- teamdata %>%
+  filter(seasonid %in% promo_teams$seasonid & season != max(season)) %>%
+  select(season,gfor,gaga,xgf,xga) %>%
+  group_by(season) %>%
+  summarise(
+    off.adj = mean(gfor),
+    def.adj = mean(gaga),
+    xg_off.adj = mean(coalesce(gfor,xgf)),
+    xg_def.adj = mean(coalesce(gaga,xga))
+  ) %>%
+  mutate(
+    season = season+1
+  )
+
+## Team totals from previous season in Serie B
+promo_metrics <- teamdata %>%
+  filter(league == "Serie B" & season != max(season)) %>%
+  group_by(season,team) %>%
+  arrange(date) %>%
+  ## Create Off, def, expected off, and expected def ratings
+  mutate(
+    row = row_number(),
+    ## team id
+    teamid = paste0(as.character(as.numeric(date)),"_",team),
+    ## team specific home adjustments
+    adj_off.a = (adj_off+adv)/2,
+    ## team specific away adjustments
+    adj_def.a = (adj_def+adv)/2,
+    ## off rating
+    off = ifelse(row==1,NA,cummean(gfor)),
+    ## Def rating
+    def = ifelse(row==1,NA,cummean(gaga)),
+    ## expected off rating
+    xg_off = ifelse(row==1,NA,cummean(coalesce(xgf,gfor))),
+    ## expected def rating
+    xg_def = ifelse(row==1,NA,cummean(coalesce(xga,gaga))),
+    ## 
+  ) %>%
+  ungroup() %>%
+  group_by(team) %>%
+  ## Replace stats of first match with stats from last match of previous season
+  mutate(
+    ## replace off rating
+    off = ifelse(is.na(off),lag(off),NA),
+    ## replace def rating
+    def = ifelse(is.na(def),lag(def),NA),
+    ## replace expected off rating
+    xg_off = ifelse(is.na(xg_off),lag(xg_off),NA),
+    ## replace expected def rating
+    xg_def = ifelse(is.na(xg_def),lag(xg_def),NA)
+  ) %>%
+  ungroup() %>%
+  group_by(season,team) %>%
+  mutate(
+    ## Final off rating
+    off = cummean(coalesce(off,gfor)),
+    ## Final def rating
+    def = cummean(coalesce(def,gaga)),
+    ## Final xg for rating
+    xg_off = cummean(coalesce(xg_off,xgf,gfor)),
+    ## Final xg against rating
+    xg_def = cummean(coalesce(xg_def,xga,gaga)),
+    ## Create promoid
+    promoid = paste0(as.character(season+1),"_",team),
+    ## Create promotion season id
+    promoseason = season+1
+  ) %>%
+  filter(promoid %in% promo_teams$seasonid) %>%
+  filter(row==max(row)) %>%
+  ungroup() %>%
+  left_join(season_adj,by=c("promoseason"="season")) %>%
+  mutate(
+    row = 1,
+    off.a = (off+off.adj)/2,
+    def.a = (def+def.adj)/2,
+    xg_off.a = (xg_off+xg_off.adj)/2,
+    xg_def.a = (xg_def+xg_def.adj)/2
+  ) %>%
+  select(promoid,row,off.a,def.a,xg_off.a,xg_def.a,adj_off.a,adj_def.a) %>%
+  rename(seasonid = promoid)
+
+## Get team data after adjusting recently promoted teams
+teamdata1 <- teamdata %>%
+  filter(league == "Serie A" & seasonid %in% seriea_teams) %>%
+  group_by(season,team) %>%
+  arrange(date) %>%
+  ## Create Off, def, expected off, and expected def ratings
+  mutate(
+    row = row_number(),
+    ## team id
+    teamid = paste0(as.character(as.numeric(date)),"_",team),
+    ## off rating
+    off = ifelse(row==1,NA,cummean(gfor)),
+    ## Def rating
+    def = ifelse(row==1,NA,cummean(gaga)),
+    ## expected off rating
+    xg_off = ifelse(row==1,NA,cummean(coalesce(xgf,gfor))),
+    ## expected def rating
+    xg_def = ifelse(row==1,NA,cummean(coalesce(xga,gaga)))
+  ) %>%
+  ungroup() %>%
+  left_join(promo_metrics,by=c("row","seasonid")) %>%
+  mutate(
+    off = coalesce(off.a,off),
+    def = coalesce(def.a,def),
+    xg_off = coalesce(xg_off.a,xg_off),
+    xg_def = coalesce(xg_def.a,xg_def),
+    adj_off = coalesce(adj_off,adj_off.a),
+    adj_def = coalesce(adj_def,adj_def.a)
+  ) %>%
+  group_by(team) %>%
+  ## Replace stats of first match with stats from last match of previous season
+  mutate(
+    ## calculate off rating
+    off = ifelse(is.na(off),lag(off),ifelse(row==1,off,NA)),
+    ## replace def rating
+    def = ifelse(is.na(def),lag(def),ifelse(row==1,def,NA)),
+    ## replace expected off rating
+    xg_off = ifelse(is.na(xg_off),lag(xg_off),ifelse(row==1,xg_off,NA)),
+    ## replace expected def rating
+    xg_def = ifelse(is.na(xg_def),lag(xg_def),ifelse(row==1,xg_def,NA))
+  ) %>%
+  ungroup() %>%
+  group_by(season,team) %>%
+  mutate(
+    ## Final off rating
+    off = cummean(coalesce(off,gfor)),
+    ## Final def rating
+    def = cummean(coalesce(def,gaga)),
+    ## Final xg for rating
+    xg_off = cummean(coalesce(xg_off,xgf,gfor)),
+    ## Final xg against rating
+    xg_def = cummean(coalesce(xg_def,xga,gfor))
+  ) %>%
+  ungroup() %>%
+  filter(season != 2015)
+
+teamdata2 <- teamdata1 %>%
+  select(teamid,off,def,xg_off,xg_def,adj_off,adj_def)
+
+## Creating poisson model 1 data
+poisson <- union(
+  regression %>%
+    filter(season!=2015 & league=="Serie A") %>%
+    mutate(
+      team1id = paste0(as.character(as.numeric(date)),"_",team1),
+      team2id = paste0(as.character(as.numeric(date)),"_",team2)
+    ) %>%
+    select(-h_off,-h_def,-a_off,-a_def) %>%
+    left_join(teamdata2,by=c('team1id' = "teamid")) %>%
+    rename(
+      off1 = off, def1 = def, xg_off1 = xg_off, xg_def1 = xg_def, h_off = adj_off,
+      h_def = adj_def
+    ) %>%
+    left_join(teamdata2,by=c('team2id' = "teamid")) %>%
+    rename(
+      off2 = off, def2 = def, xg_off2 = xg_off, xg_def2 = xg_def, a_off = adj_off,
+      a_def = adj_def
+    ) %>%
+    select(
+      season,date,score1,team1,spi1,spi2,off1,def2,xg_off1,xg_def2,m1_exp,m1_off,
+      m2_def,h_off,a_def
+    ) %>%
+    rename(
+      gfor = score1, team = team1, spi_off = spi1, spi_def = spi2, off = off1,
+      def = def2, xg_off = xg_off1, xg_def = xg_def2, m_exp = m1_exp,
+      m_off = m1_off, m_def = m2_def, adj_off = h_off, adj_def = a_def
+    ),
+  regression %>%
+    filter(season!=2015 & league=="Serie A") %>%
+    mutate(
+      team1id = paste0(as.character(as.numeric(date)),"_",team1),
+      team2id = paste0(as.character(as.numeric(date)),"_",team2)
+    ) %>%
+    select(-h_off,-h_def,-a_off,-a_def) %>%
+    left_join(teamdata2,by=c('team1id' = "teamid")) %>%
+    rename(
+      off1 = off, def1 = def, xg_off1 = xg_off, xg_def1 = xg_def, h_off = adj_off,
+      h_def = adj_def
+    ) %>%
+    left_join(teamdata2,by=c('team2id' = "teamid")) %>%
+    rename(
+      off2 = off, def2 = def, xg_off2 = xg_off, xg_def2 = xg_def, a_off = adj_off,
+      a_def = adj_def
+    ) %>%
+    select(
+      season,date,score2,team2,spi2,spi1,off2,def1,xg_off2,xg_def1,m2_exp,m2_off,
+      m1_def,a_off,h_def
+    ) %>%
+    rename(
+      gfor = score2, team = team2, spi_off = spi2, spi_def = spi1, off = off2,
+      def = def1, xg_off = xg_off2, xg_def = xg_def1, m_exp = m2_exp,
+      m_off = m2_off, m_def = m1_def, adj_off = a_off, adj_def = h_def
+    )
+  ) %>%
+  filter(!is.na(gfor)) %>%
+  select(season,date,team,gfor,spi_off,spi_def,off,def,xg_off,xg_def,m_exp,
+         m_off,m_def,adj_off,adj_def)
+
+## Poisson method 2
+poisson1 <- union(
+  regression %>%
+    filter(season!=2015 & league=="Serie A") %>%
+    mutate(
+      team1id = paste0(as.character(as.numeric(date)),"_",team1),
+      team2id = paste0(as.character(as.numeric(date)),"_",team2)
+    ) %>%
+    select(-h_off,-h_def,-a_off,-a_def) %>%
+    left_join(teamdata2,by=c('team1id' = "teamid")) %>%
+    rename(
+      off1 = off, def1 = def, xg_off1 = xg_off, xg_def1 = xg_def, h_off = adj_off,
+      h_def = adj_def
+    ) %>%
+    left_join(teamdata2,by=c('team2id' = "teamid")) %>%
+    rename(
+      off2 = off, def2 = def, xg_off2 = xg_off, xg_def2 = xg_def, a_off = adj_off,
+      a_def = adj_def
+    ) %>%
+    select(
+      season,date,score1,team1,spi1,spi2,off1,def2,xg_off1,xg_def2,m1_exp,m1_off,
+      m2_def,h_off,a_def
+    ) %>%
+    rename(
+      gfor = score1, team = team1, spi_off = spi1, spi_def = spi2, off = off1, def = def2,
+      xg_off = xg_off1, xg_def = xg_def2, m_exp = m1_exp, m_off = m1_off,
+      m_def = m2_def, adj_off = h_off, adj_def = a_def
+    ),
+  regression %>%
+    filter(season!=2015 & league=="Serie A") %>%
+    mutate(
+      team1id = paste0(as.character(as.numeric(date)),"_",team1),
+      team2id = paste0(as.character(as.numeric(date)),"_",team2)
+    ) %>%
+    select(-h_off,-h_def,-a_off,-a_def) %>%
+    left_join(teamdata2,by=c('team1id' = "teamid")) %>%
+    rename(
+      off1 = off, def1 = def, xg_off1 = xg_off, xg_def1 = xg_def, h_off = adj_off,
+      h_def = adj_def
+    ) %>%
+    left_join(teamdata2,by=c('team2id' = "teamid")) %>%
+    rename(
+      off2 = off, def2 = def, xg_off2 = xg_off, xg_def2 = xg_def, a_off = adj_off,
+      a_def = adj_def
+    ) %>%
+    select(
+      season,date,score2,team2,spi2,spi1,off2,def1,xg_off2,xg_def1,m2_exp,m2_off,
+      m1_def,a_off,h_def
+    ) %>%
+    rename(
+      gfor = score2, team = team2, spi_off = spi2, spi_def = spi1, off = off2,
+      def = def1, xg_off = xg_off2, xg_def = xg_def1, m_exp = m2_exp,
+      m_off = m2_off, m_def = m1_def, adj_off = a_off, adj_def = h_def
+    )
+  ) %>%
+  mutate(
+    rel_spi = spi_off/spi_def,
+    rel_g = ifelse(def==0,off/1,off/def),
+    rel_xg = ifelse(xg_def==0,xg_off/1,xg_off/xg_def),
+    rel_m = ifelse(m_def==0,m_off/1,m_off/m_def),
+    rel_adj = ifelse(adj_def==0,adj_off/1,adj_off/adj_def)
+  ) %>%
+  filter(!is.na(gfor)) %>%
+  select(season,date,team,gfor,rel_spi,rel_g,rel_xg,rel_m,rel_adj,m_exp)
+```
+```{r model-split, set.seed(201105224)}
+knitr::opts_chunk$set(cache = T, cache.extra = rand_seed)
+set.seed(201105224)
+split <- sample(c(rep(0, floor(0.80 * nrow(poisson))),
+                  rep(1, ceiling(0.20 * nrow(poisson)))))
+
+# set.seed(201105224)
+split1 <- sample(c(rep(0, floor(0.80 * nrow(poisson1))),
+                  rep(1, ceiling(0.20 * nrow(poisson1)))))
+
+pois_train <- poisson[split==0,4:12]
+pois_test <- poisson[split==1,4:12]
+
+pois1_train <- poisson1[split1==0,4:10]
+pois1_test <- poisson1[split1==1,4:10]
+```
+```{r model-build}
+knitr::opts_chunk$set(cache = T, cache.extra = rand_seed)
+set.seed(201105224)
+p_model0 <- glm(gfor~off+def+m_exp+m_off, family = poisson(link = "log"), pois_train)
+
+p_model1 <- glm(gfor~rel_spi+rel_m, family = poisson(link = "log"), pois1_train)
+
+p0_table <- apa_print(p_model0)
+p1_table <- apa_print(p_model1)
+
+p0c <- round(p_model0$coefficients,2)
+
+p1c <- round(p_model1$coefficients,2)
+
+p0i <- varImp(p_model0) %>%
+  rownames_to_column(var="predictors") %>%
+  arrange(desc(Overall)) %>%
+  mutate(
+    total = sum(Overall),
+    weight = Overall/total,
+    model = "Poisson: No interaction columns"
+  ) %>%
+  select(model,predictors,weight)
+
+p1i <- varImp(p_model1) %>%
+  rownames_to_column(var="predictors") %>%
+  arrange(desc(Overall)) %>%
+  mutate(
+    total = sum(Overall),
+    weight = Overall/total,
+    model = "Poisson: Interaction columns"
+  ) %>%
+  select(model,predictors,weight)
+```
+```{r model-compare, set.seed(201105224)}
+knitr::opts_chunk$set(cache = T, cache.extra = rand_seed)
+set.seed(201105224)
+roundpred <- c(round(exp(predict(p_model1,pois1_test[,-1]))),
+               round(exp(predict(p_model0,pois_test[,-1]))))
+
+# set.seed(201105224)
+predict <- c(exp(predict(p_model1,pois1_test[,-1])),
+             exp(predict(p_model0,pois_test[,-1])))
+
+# set.seed(201105224)
+reg_succ <- data.frame(
+  model = c(rep("Poisson: Interaction columns",length(pois1_test$gfor)),
+            rep("Poisson: No interaction columns",length(pois_test$gfor))),
+  roundpred = roundpred,
+  predict = predict,
+  truevalue = c(pois1_test$gfor,pois_test$gfor)
+) %>%
+  mutate(
+    succ = ifelse(roundpred==truevalue,"Success","Fail")
+  ) %>%
+  group_by(model,succ) %>%
+  summarise(
+    count = n()
+  ) %>%
+  ungroup(succ) %>%
+  mutate(
+    percent = count/sum(count)
+  ) %>%
+  ungroup() %>%
+  select(model,succ,percent) %>%
+  pivot_wider(names_from = succ,values_from = percent)
+
+## Creating lambda1 and lambda2 metrics
+lambda_df <- union(
+  regression %>%
+    filter(season!=2015 & league=="Serie A") %>%
+    select(
+      season,league,date,score1,score2,team1,team2,spi1,spi2,m1_exp,m2_exp,m1_off,
+      m2_off,m1_def,m2_def
+    ),
+  spi %>%
+    filter(league == 'Serie A' & date >= '2022-04-30' & date <= '2022-05-02') %>%
+    mutate(gameid = paste0(as.character(as.numeric(date)),"_",team1,"_",team2)) %>%
+    left_join(manager[,c(9,10,13,14,16:18)],by = "gameid") %>%
+    select(
+      season,league,date,score1,score2,team1,team2,spi1,spi2,m1_exp,m2_exp,m1_off,
+      m2_off,m1_def,m2_def
+    )
+  ) %>%
+  mutate(
+    team1id = paste0(as.character(as.numeric(date)),"_",team1),
+    team2id = paste0(as.character(as.numeric(date)),"_",team2),
+  ) %>%
+  left_join(teamdata2,by=c('team1id' = "teamid")) %>%
+  rename(
+    off1 = off, def1 = def, xg_off1 = xg_off, xg_def1 = xg_def, h_off = adj_off,
+    h_def = adj_def
+  ) %>%
+  left_join(teamdata2,by=c('team2id' = "teamid")) %>%
+  rename(
+    off2 = off, def2 = def, xg_off2 = xg_off, xg_def2 = xg_def, a_off = adj_off,
+    a_def = adj_def
+  ) %>%
+  select(
+    season,date,score1,score2,team1,team2,spi1,spi2,off1,def1,off2,def2,xg_off1,xg_off2,
+    xg_def1,xg_def2,m1_exp,m2_exp,m1_off,m2_off,m1_def,m2_def,h_off,h_def,a_off,a_def
+  ) %>%
+  group_by(season,team1) %>%
+  fill(off1,def1,xg_off1,xg_def1,h_off,h_def,m1_off,m1_def) %>%
+  ungroup(team1) %>%
+  group_by(season,team2) %>%
+  fill(off2,def2,xg_off2,xg_def2,a_off,a_def,m2_off,m2_def) %>%
+  ungroup()
+
+proj_df <- lambda_df %>%
+  filter(season==2021) %>%
+  mutate(
+    row = row_number(),
+    gameid = paste0(as.character(as.numeric(date)),"_",team1,"_",team2),
+    proj0.1 = exp(-1.43+0.49*off1+0.56*def2+0.12*m1_exp+0.09*m1_off),
+    proj1.1 = exp(-0.85+1.06*(spi1/spi2)+0.05*(m1_off/m2_def)),
+    proj0.2 = exp(-1.43+0.49*off2+0.56*def1+0.12*m2_exp+0.09*m2_off),
+    proj1.2 = exp(-0.85+1.06*(spi2/spi1)+0.05*(m2_off/m1_def))
+  ) %>%
+  mutate(
+    proj0.1 = ifelse(
+      proj0.1>max(teamdata$gfor),
+      (mean(teamdata$gfor,na.rm = T)+proj0.1)/2,
+      proj0.1
+    ),
+    proj0.2 = ifelse(
+      proj0.2>max(teamdata$gaga),
+      (mean(teamdata$gfor,na.rm = T)+proj0.2)/2,
+      proj0.2
+    ),
+    proj1.1 = ifelse(
+      proj1.1>max(teamdata$gfor),
+      (mean(teamdata$gfor,na.rm = T)+proj1.1)/2,
+      proj1.1
+    ),
+    proj1.2 = ifelse(
+      proj1.2>max(teamdata$gaga),
+      (mean(teamdata$gfor,na.rm = T)+proj1.2)/2,
+      proj1.2
+    )
+  ) %>%
+  select(gameid,season,date,team1,team2,proj0.1,proj0.2,proj1.1,proj1.2)
+
+proj_ex_df <- proj_df[proj_df$date >= '2022-04-30',]
+
+knitr::opts_chunk$set(cache = T, cache.extra = rand_seed)
+## Initiate simulation counts
+runs <- 10000
+## Initiate dataframes for loop
+proj_final <- data.frame()
+proj_merge <- data.frame()
+
+set.seed(201105224)
+## Initiat for loop
+for(id in unique(proj_ex_df$gameid)){
+
+  ## Create simulation for team1
+  sim_team1 <- rpois(runs,proj_ex_df[proj_ex_df$gameid == id,"proj0.1"][[1]])
+  
+  ## Create simulation for team2
+  sim_team2 <- rpois(runs,proj_ex_df[proj_ex_df$gameid == id,"proj0.2"][[1]])
+  
+  ## Create second sim for team1 using alternate proj calculation method
+  sim_team1_1 <- rpois(runs,proj_ex_df[proj_ex_df$gameid == id,"proj1.1"][[1]])
+  ## Create second sim for team2 using alternate proj calculation method
+
+  sim_team2_1 <- rpois(runs,proj_ex_df[proj_ex_df$gameid == id,"proj1.2"][[1]])
+  
+  ## Combine simulation team1 and team2
+  sim_df <- data.frame(
+    gameid = replicate(runs,id),
+    team1 = ifelse(sim_team1>4,"5+",as.character(sim_team1)),
+    team2 = ifelse(sim_team2>4,"5+",as.character(sim_team2)),
+    sim_team1 = sim_team1,
+    sim_team2 = sim_team2,
+    team1_1 = ifelse(sim_team1_1>4,"5+",as.character(sim_team1_1)),
+    team2_1 = ifelse(sim_team2_1>4,"5+",as.character(sim_team2_1)),
+    sim_team1_1 = sim_team1_1,
+    sim_team2_1 = sim_team2_1    
+  ) %>%
+    mutate(
+      ## Create outcome column
+      outcome = ifelse(sim_team1==sim_team2,"tie",ifelse(sim_team1>sim_team2,"win1","win2")),
+      outcome1 = ifelse(sim_team1_1==sim_team2_1,"tie",
+                        ifelse(sim_team1_1>sim_team2_1,"win1","win2"))
+    ) %>%
+    select(gameid,team1,team2,team1_1,team2_1,outcome,outcome1)
+  
+  ## Create dataframe to merge onto proj_df
+  sim_merge_df <- union(
+    sim_df %>%
+      group_by(gameid,outcome) %>%
+      summarise(
+        cnt = n()
+      ) %>%
+      mutate(
+        ## Get percent chance each outcome happens
+        chance = cnt/sum(cnt)*100,
+        simtype = "No interaction model"
+      ) %>%
+      ungroup() %>%
+      select(gameid,simtype,outcome,chance) %>%
+      pivot_wider(names_from = outcome, values_from = chance),
+    sim_df %>%
+      group_by(gameid,outcome1) %>%
+      summarise(
+        cnt = n()
+      ) %>%
+      mutate(
+        ## Get percent chance each outcome happens
+        chance = cnt/sum(cnt)*100,
+        simtype = "Interaction model"
+      ) %>%
+      ungroup() %>%
+      select(gameid,simtype,outcome1,chance) %>%
+      pivot_wider(names_from = outcome1, values_from = chance)
+    )
+  
+  proj_final <- rbind(proj_final,sim_df)
+  proj_merge <- rbind(proj_merge,sim_merge_df)
+}
+
+full_proj <- rbind(
+  proj_final %>%
+    select(gameid,team1,team2,outcome) %>%
+    group_by(gameid,team1,team2) %>%
+    summarise(n=n()) %>%
+    ungroup() %>%
+    group_by(gameid) %>%
+    mutate(
+      simtype = 'No Interaction',
+      chance = n/sum(n),
+      outcome = ifelse(team1 > team2,'win1',ifelse(team2 > team1,'win2','tie'))
+    ) %>%
+    group_by(gameid,simtype,outcome) %>%
+    summarise(
+      chance = sum(chance)*100
+    ) %>%
+    pivot_wider(names_from = outcome, values_from = chance) %>%
+    mutate(
+      projoutcome = ifelse(win1>win2&win1>tie,'win1',ifelse(win2>win1&win2>tie,'win2','tie'))
+    ) %>%
+    ungroup(),
+  proj_final %>%
+    select(gameid,team1_1,team2_1,outcome) %>%
+    group_by(gameid,team1_1,team2_1) %>%
+    summarise(n=n()) %>%
+    ungroup() %>%
+    group_by(gameid) %>%
+    mutate(
+      simtype = 'Interaction',
+      chance = n/sum(n),
+      outcome = ifelse(team1_1 > team2_1,'win1',ifelse(team2_1 > team1_1,'win2','tie'))
+    ) %>%
+    group_by(gameid,simtype,outcome) %>%
+    summarise(
+      chance = sum(chance)*100
+    ) %>%
+    pivot_wider(names_from = outcome, values_from = chance) %>%
+    mutate(
+      projoutcome = ifelse(win1>win2&win1>tie,'win1',ifelse(win2>win1&win2>tie,'win2','tie'))
+    ) %>%
+    ungroup(),
+  proj_df %>%
+    filter(date < '2022-04-30') %>%
+    select(gameid,proj0.1,proj0.2) %>%
+    group_by(gameid) %>%
+    mutate(
+      win1 = proj_perc(proj0.1,proj0.2)$win1,
+      win2 = proj_perc(proj0.1,proj0.2)$win2,
+      tie = proj_perc(proj0.1,proj0.2)$tie,
+      simtype = "No Interaction"
+    ) %>%
+    ungroup() %>%
+    select(gameid,simtype,tie,win1,win2) %>%
+    mutate(
+      projoutcome = ifelse(win1>win2&win1>tie,'win1',ifelse(win2>win1&win2>tie,'win2','tie'))
+    ),
+  proj_df %>%
+    filter(date < '2022-04-30') %>%
+    select(gameid,proj1.1,proj1.2) %>%
+    group_by(gameid) %>%
+    mutate(
+      win1 = proj_perc(proj1.1,proj1.2)$win1,
+      win2 = proj_perc(proj1.1,proj1.2)$win2,
+      tie = proj_perc(proj1.1,proj1.2)$tie,
+      simtype = "Interaction"
+    ) %>%
+    ungroup() %>%
+    select(gameid,simtype,tie,win1,win2) %>%
+    mutate(
+      projoutcome = ifelse(win1>win2&win1>tie,'win1',ifelse(win2>win1&win2>tie,'win2','tie'))
+    )
+) %>%
+  left_join(
+    proj_df %>%
+      select(gameid,season,date,team1,team2,proj0.1,proj0.2,proj1.1,proj1.2) %>%
+      pivot_longer(
+        !c(gameid,season,date,team1,team2),
+        names_to = "projtype",
+        values_to = "projscore") %>%
+      mutate(
+        simtype = ifelse(grepl('proj0',projtype,fixed=T),'No Interaction',"Interaction"),
+        projtype = ifelse(grepl('.1',projtype,fixed=T),"proj1","proj2")
+      ) %>%
+      pivot_wider(
+        id_cols=c("gameid","simtype","season","date","team1","team2"),
+        names_from = "projtype",
+        values_from = "projscore") %>%
+      select(gameid,season,date,team1,team2,simtype,proj1,proj2),
+    by = c("gameid","simtype")
+  ) %>%
+  arrange(gameid)
+
+proj_ex <- proj_final %>%
+  filter(gameid == "19113_Milan_Fiorentina") %>%
+  select(team1,team2,outcome1) %>%
+  group_by(team1,team2) %>%
+  summarise(n=n()) %>%
+  ungroup() %>%
+  mutate(
+    chance = n/sum(n)
+  ) %>%
+  rename(
+    Milan = team1, Fiorentina = team2
+  ) %>%
+  select(Milan,Fiorentina,chance) %>%
+  mutate(chance = chance*100) %>%
+  pivot_wider(names_from = Fiorentina, values_from = chance) %>%
+  replace_na(list(`0`=0.00,`1`=0.00,`2`=0.00,`3`=0.00,`4`=0.00,`5+`=0.00)) %>%
+  remove_rownames() %>%
+  column_to_rownames(var = "Milan") %>%
+  as.matrix()
+```
+
+```{r lambda-sim-ex, set.seed(201105224)}
+results <- lambda_df %>%
+  filter(season==2021) %>%
+  mutate(
+    outcome = ifelse(score1==score2,"tie",ifelse(score1>score2,"win1","win2")),
+    gameid = paste0(as.character(as.numeric(date)),"_",team1,"_",team2)
+  ) %>%
+  select(gameid,date,team1,team2,outcome) %>%
+  left_join(
+    full_proj %>%
+      filter(simtype == "No Interaction") %>%
+      rename(projoutcome0 = projoutcome) %>%
+      select(gameid,projoutcome0),
+    by = "gameid"
+  ) %>%
+  left_join(
+    full_proj %>%
+      filter(simtype == "Interaction") %>%
+      rename(projoutcome1 = projoutcome) %>%
+      select(gameid,projoutcome1),
+    by = "gameid"
+  )
+
+success <- rbind(
+    results %>%
+      mutate(
+        succ = ifelse(outcome==projoutcome0,"Succeed","Fail")
+      ) %>%
+      group_by(succ) %>%
+      summarise(count=n()) %>%
+      mutate(
+        model = "1",
+        percent=paste0(round(count/sum(count),2)*100,'%')
+      ) %>%
+      select(model,succ,percent),
+    results %>%
+      mutate(
+        succ = ifelse(outcome==projoutcome1,"Succeed","Fail")
+      ) %>%
+      group_by(succ) %>%
+      summarise(count=n()) %>%
+      mutate(
+        model = "2",
+        percent=paste0(round(count/sum(count),2)*100,'%')
+      ) %>%
+      select(model,succ,percent)
+    )
+```
+```{r lambda-sim-spi, set.seed(201105224)}
+knitr::opts_chunk$set(cache = T, cache.extra = rand_seed)
+set.seed(201105224)
+## Get all spi projections
+spi_proj <- spi.df %>%
+  filter(league_id == 1854 & season == 2021 & date>='2021-08-21' & date<='2022-05-02') %>%
+  select(season,date,team1,team2,proj_score1,proj_score2) %>%
+  replace(. == "AC Milan", "Milan") %>%
+  replace(. == "AS Roma", "Roma") %>%
+  replace(. == "Internazionale", "Inter Milan") %>%
+  replace(. == "F.B.C Unione Venezia", "Venezia") %>%
+  replace(. == "Verona", "Hellas Verona") %>%
+  replace(. == "AC Milan", "Milan") %>%
+  mutate(
+    date = as.Date.character(date,format = "%Y-%m-%d"),
+    gameid = paste0(as.character(as.numeric(date)),"_",team1,"_",team2),
+    row = row_number()
+  ) %>%
+  group_by(row) %>%
+  mutate(
+    win1 = proj_perc(proj_score1,proj_score2)$win1,
+    win2 = proj_perc(proj_score1,proj_score2)$win2,
+    tie = proj_perc(proj_score1,proj_score2)$tie
+  ) %>%
+  rename(
+    proj1 = proj_score1, proj2 = proj_score2
+  ) %>%
+  ungroup()
+
+final_proj <- full_proj %>%
+  filter(simtype=='No Interaction')
+
+diff_df <- final_proj %>%
+  select(gameid,season,date,win1,win2,tie) %>%
+  left_join(
+    spi_proj %>%
+      select(gameid,team1,team2,win1,win2,tie) %>%
+      rename(win1_538 = win1, win2_538 = win2, tie_538 = tie),
+    by="gameid"
+  ) %>%
+  mutate(
+    win1_diff = win1-win1_538,
+    win2_diff = win2-win2_538,
+    tie_diff = tie-tie_538
+  ) %>%
+  select(season,date,team1,team2,win1_diff,win2_diff,tie_diff)
+
+outcomes <- spi.df %>%
+  filter(league_id == 1854 & season == 2021 & date>='2021-08-21' & date<='2022-05-02') %>%
+  replace(. == "AC Milan", "Milan") %>%
+  replace(. == "AS Roma", "Roma") %>%
+  replace(. == "Internazionale", "Inter Milan") %>%
+  replace(. == "F.B.C Unione Venezia", "Venezia") %>%
+  replace(. == "Verona", "Hellas Verona") %>%
+  replace(. == "AC Milan", "Milan") %>%
+  mutate(
+    date = as.Date.character(date,format = "%Y-%m-%d"),
+    xg1 = round((adj_score1+xg1+nsxg1)/3,2),
+    xg2 = round((adj_score2+xg2+nsxg2)/3,2),
+    gameid = paste0(as.character(as.numeric(date)),"_",team1,"_",team2),
+    outcome = ifelse(score1==score2,"tie",ifelse(score1>score2,"win1","win2"))
+  ) %>%
+  select(gameid,date,team1,team2,score1,score2,xg1,xg2,outcome) %>%
+  left_join(
+    spi_proj %>%
+      mutate(spioutcome = ifelse(tie>win1 & tie>win2,"tie",ifelse(win1>win2,"win1","win2"))) %>%
+      select(gameid,spioutcome),
+    by="gameid"
+  ) %>%
+  left_join(final_proj %>% select(gameid,projoutcome),by = "gameid") %>%
+  select(date,team1,team2,outcome,projoutcome,spioutcome)
+
+## Get the two wrong matchday35 predictions
+wrong_pred <- union(
+  final_proj %>%
+    filter(gameid %in% c('19113_Roma_Bologna','19114_Atalanta_Salernitana')) %>%
+    select(gameid,team1,team2,win1,win2,tie),
+  spi_proj %>%
+    filter(gameid %in% c('19113_Roma_Bologna','19114_Atalanta_Salernitana')) %>%
+    select(gameid,team1,team2,win1,win2,tie)  
+) %>%
+  inner_join(
+    spi %>%
+      filter(league=='Serie A' & date >= '2022-04-30' & date <= '2022-05-02') %>%
+      mutate(
+        exp_score1 = round((xg1+nsxg1)/2,2),
+        exp_score2 = round((xg2+nsxg2)/2,2)
+      ) %>%
+      select(gameid,score1,score2,exp_score1,exp_score2),
+    by="gameid"
+  ) %>%
+  select(team1,team2,win1,win2,tie,score1,score2,exp_score1,exp_score2)
+
+## Get the 2021-2022 outcome success/fail data
+f_out_suc <- union(
+  outcomes %>%
+    mutate(success = ifelse(projoutcome==outcome,"Success","Failure")) %>%
+    group_by(success) %>%
+    summarise(n = n()) %>%
+    mutate(p = paste0(round(n/sum(n),2)*100,"%")) %>%
+    select(success,p),
+  outcomes %>%
+    mutate(success = ifelse(spioutcome==outcome,"Success","Failure")) %>%
+    group_by(success) %>%
+    summarise(n = n()) %>%
+    mutate(p = paste0(round(n/sum(n),2)*100,"%")) %>%
+    select(success,p)
+)
+```
+# Introduction^[The following R libraries were used for this paper: [@R-base], [@R-dplyr], [@R-tidyr], [@R-knitr], [@R-kableExtra], [@R-papaja], [@R-tibble], [@R-caret]]
+
+  Sports betting is currently legal in 31 out of 50 states, with 10 more states potentially joining the list in the next year [@Rovell2021]. Just this past year in January 2022 New York was the latest state to legalize sports betting. Doing so added an additional \$1.6 billion to the sports betting market. This addition was the driving factor in increasing the total sports betting handle for January by 30% from \$7.54 billion to \$9.82 billion in the United States [@Ordine2022]. While football, basketball, and baseball dominate the betting world of sports, soccer can still generate a huge amount of profit if selecting the correct outcomes. Some of the possible betting options are the moneyline option, deciding whether the game outcome will be a home win, a tie, or an away win, or the over/under option on total goals scored. The purpose of this project is to attempt to improve on the analytics that are already available to be able to more accurately predict match outcomes and scores.  
+  
+  Predicting goals should be considered a Poisson distribution more than a Negative Binomial when developing a projection model for individual teams. Examining the distribution of goals by all the teams in the league would show a Poisson distribution with variable mean, allowing for a Negative Binomial model to be developed. The problem with this approach is that to predict the outcome of a game each team’s goals scoring chances have to be considered independently on the side of the field in which they happen. Assuming the probability to score a goal, $p$, is constant, and attacks by each team are independent events then a Poisson distribution will fit the data much better [@Maher1982].  
+  
+  Building on this idea that goals follow a Poisson distribution, [@Croucher2004], developed a method to predict match outcomes. By taking the home scoring average as the $\lambda_1$ and the away scoring average as the $\lambda_2$, [@Croucher2004] created probabilities for the home team and away teams to score 0 to 4 or more goals. Converting these probabilities into matrix form, [@Croucher2004] was able to assign individual probabilities to each event happening, i.e. the chance a 0-0 game occurs or a 1-0 games occurs. By adding the probabilities at the bottom half of the matrix, [@Croucher2004] established the home teams winning chances. Adding the probabilities in top half of the matrix, he arrived at the away team winning chances. Finally, by adding the diagonal, he was able to achieve the probability of a tie.  
+  
+  Putting the concept introduced by [@Maher1982] that goals follow a Poisson distribution and the equations put forth by [@Croucher2004], [@Boice2018] developed a more complete prediction model, introducing a new concept to soccer prediction, the Soccer Power Index (SPI) rating. SPI is a measure for the best estimate for a team's overall strength and is used in calculating each teams $\lambda$ for each future game. [@Boice2018] refers to this as the projected score 1 for the home team and projected score 2 for the away team. FiveThirtyEight's model simulates each game using the method introduced in [@Croucher2004] over the course of a season to arrive at season long predictions.  
+  
+  This paper will explore the effects of considering the team manager as an important part of the goal scoring process. Each manager has a theory on how a soccer game should be played. A manager could want their team to be more attacking or more defensive, which would affect how many goals are scored and the chances a team has to win a game. Then by calculating a new $\lambda$ considering the manager in charge for any given game, this paper will add to the predictive methods developed by [@Boice2018]. I will then compare my $\lambda$ Poisson forecasting method with that of FiveThirtyEight. Each method will create percent chances for games and we can compare which modeling method is the most accurate. The model that forecasts games with a greater level of accuracy can be used to develop a soccer gambling calculator and assist people in selecting game outcomes.
+
+# Methods
+
+  This section contains the process for collecting data, how the data were processed and cleaned, how the data were analyzed, and finally how the new $\lambda$ was developed. The data includes Italian League Serie A and Serie B games dating from 2015 to present excluding Serie B playoff games. Playoff games are more difficult to predict since they have a much different atmosphere to them. Whereas losing a season game might not automatically disqualify a team from winning the league, losing in a playoff game will eliminate a team from being promoted, giving players extra motivation in playoff games.
+  
+  In addition to league game data, I also collected all games managed by each team’s manager going back from their first game to their most recent relevant game. That is, if a manager was fired halfway through season 2017 and never came back as a manger in Serie A, their historic games would end on their last Serie A game managed for season 2017. Manager data also excludes playoff games or competition games, such as UEFA Champions League, for the same reasoning as excluding Serie B playoff games.
+  
+  The data was then pre-processed and analyzed using a Poisson regression. The $\lambda$s were developed by predicting the game scores using the best Poisson regression. These predicted goals, the final $\lambda_1$ and $\lambda_2$, were then used to simulate each teams chance of scoring $x$ amount of goals within a game. By then applying [@Croucher2004] method, each game was assigned an outcome percentage^[home win, away win, tie], which was used to determine the game’s final outcome.
+
+## Collection
+
+  Data for each Serie A and Serie B games starting from 2016 was collected from the Github repository, [@SpiData]. This data is automatically loaded from the Github repository using the *spi_matches.csv* file in the data pre-processing stage. FiveThirtyEight's data only goes back to 2016 for Serie A and 2017 for Serie B, therefore the 2015 Serie A match scores and 2016 Serie B match scores were manually collected using [@Transfermrkt] into a file *HistoricData.csv*. The FiveThirtyEight and the older Serie A and B data were combined to create the base scoring data table.
+  
+  Manager data was collected from [@Transfermrkt] and manually copied and pasted into a csv file to build out a database for historical managerial data. Wikipedia was used to determine the manager for each team at any given time including managerial changes throughout a given season. Each row in the csv file is a game associated to a manger, potentially creating multiple rows per game if the managers for each teams are relevant to the study. Once data was manually updated the data needed to be joined together and each metric to use in creating a model needed to be created. ^[All the data files I created can be found on my [Github](https://github.com/sbiguzzi/CunyCapstone)]
+
+## Pre-processing^[All data pre-processing was done using R-dplyr [@R-dplyr]]
+
+  The first data set to be cleaned was the SPI dataset from FiveThirtyEight. A few of the teams needed to be renamed for ease of reading as well as allowing me to more easily match the league team data to the manager data. There are 10 Serie B playoff games each season to determine the three promoted teams for the following Serie A season. I removed these playoff games by assigning a counter to each row, grouped by Serie B and season, and then filtering out any row with a counter greater than the max counter minus ten. Utilizing the method outlined in [@Boice2018], taking the average of the following three metrics; *adjusted goals*, *Shot-based expected goals*, and *Non-shot expected goals*, I created the composite attacking score and the composite defensive score values for each game.
+
+  The two goals for the manager data were to, first, transform the data from a row representing a unique manager game to a row representing one unique game, and, finally, to create the necessary fields for each manager; *off*, *def*, and *exp* columns. The data was collected with one row representing a unique manager and game for ease of collection and it looks something like this:
+```{r man-ex1}
+kable(
+  as_tibble(manager.df[23752:23753,1:7]),
+  format = 'latex',
+  booktabs=T,
+  caption = "Initial manager data") %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F)
+```
+  The first step was to select the distinct combination of the first five columns of the manager data set; *date*, *team1*, *team2*, *g1*, *g2*. Next I created a team1 id and team2 id by concatenating the date and team names, which were used to merge on the manager name for those particular teams on the given date. This allowed the data to go from Table \@ref(tab:man-ex1) to 
+```{r man-ex2, results='asis'}
+kable(
+  manager[19071,c(1:5,8,12)],
+  format = 'latex',
+  booktabs=T,
+  caption = "Processed manager data") %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F)
+```
+  To create the *off* and *def* columns I took the cumulative mean of all the goals for and all the goals against a specific manager. The *exp* is the share of games that one manager managed when facing another manager.^[If manager1 managed 5 games and manager2 managed 10 games the m1_exp=$\frac{5}{5+10}=0.333$ and m2_exp=$\frac{10}{5+10}=0.667$]. The final manager pre-processing step was to combine the manager data with the game data and create the necessary columns for the analysis.^[You can get a list of the calculated columns in Appendix A - Calculated Column Logic].  
+
+  When a season starts there is not enough data to create the expected offensive and defensive ratings, and the team's actual offensive and defensive ratings. Therefore, we substitute the values for the first game of a new season with the last values from the previous season. Additionally, every season three teams from the second league division, Serie B, are promoted to Serie A. Promoted teams will generally not perform as well in Serie A as they did in Serie B and therefore adjustments need to be accounted for the get more accurate ratings for each team. Taking the each promoted team’s Serie B average for season $i-1$ and averaging that with a season adjustment of season $i-1$ performance for promoted team in season $i-1$ gives a better picture of how promoted Serie B teams in season $i$ will perform.
+
+## Analysis - Poisson and Simulation
+
+  I will be looking at two methods to create the $\lambda$s. The first method uses the predicted value from a regression using the significant predictors without transformation. The second method experiments with interacting the terms to create relative predictors, for example *Off*/*Def* would be the relative goal variable, and then using that models coefficients to create the $\lambda$s. 
+  
+  As seen in Figure \@ref(fig:goal-fig) goals for soccer games look like they follow a normal log distribution.
+```{r goal-fig, results='asis', out.width = '75%'}
+ggplot(teamdata,aes(gfor)) +
+  geom_histogram(bins=15) +
+  labs(
+    title = "Goals scored in Serie A",
+    subtitle = paste0(
+      format(min(teamdata$date),"%m/%d/%Y"),
+      " - ",
+      format(max(teamdata[!is.na(teamdata$gfor),"date"][[1]]),"%m/%d/%Y"))
+  ) +
+  ylab("Frequency")+
+  xlab("Goals")+
+  theme_apa(box=T)
+```
+Yet, goals, more accurately, meet the Poisson distribution criteria. A Poisson distribution must follow these three rules: (1) An event can occur any number of times during a time period, (2) Events occur independently, and (3) the rate of occurrence is constant. Goals follow these rule.
+  
+  First, it is theoretically possible, even though next to impossible, for a team to score an infinite number of goals in a game. Secondly, goals are independent events at the two ends of the field. In each game the attack happens on two separate sides of the field with team1 attacking team2's goal and vice versa. Goals cannot be scored at the exact same time. Furthermore, In each game the attack happens on two separate sides of the field with team1 attacking team2’s goal and vice versa. Those events are each a game within itself, rendering them independent of each other, which strengthens the idea that goals follow a Poisson distribution. Finally, the rate of occurrence for Serie A goals is `r round(mean(teamdata$gfor),2)` goals per team per game.
+  
+  Additionally, [@Croucher2004], already showed that a Poisson distribution fits goals much better than other models. Therefore, it does not make sense to try a Negative Binomial or to convert the goals using a log transformation and using a linear regression model. Instead using a Poisson regression model would be the best option to understand the interactions between predictors and goals. 
+
+  I created two models to determine which variables are significant to predicting goals, which will determine how I create the two $\lambda$s to predict future games. The first model is a backwards step wise Poisson regression which produces the results in Table \@ref(tab:pois-res0) as seen below.
+```{r pois-res0,results='asis'}
+kable(
+  p0_table$table,
+  format = 'latex',
+  booktabs=T,
+  caption = "Model using non relative goals variable") %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F)
+```
+  
+  The second model was also created stepwise where the predictors were transformed to be considered together. For example taking the *Off* variable and dividing it by the *Def* variable.^[All relative columns will be in Appendix A - Calculated Column Logic] The results of the model are seen below in Table \@ref(tab:pois-res1).
+```{r pois-res1,results='asis'}
+kable(
+  p1_table$table,
+  format = 'latex',
+  booktabs=T,
+  caption = "Model using relative goals variables") %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F)
+```
+  
+  The first model (Table \@ref(tab:pois-res0)) seems to show that the Off rating of one team versus the Def rating of another team is almost all that's needed to predict goals. All the predictors are significant at the p<0.1 level. Interestingly, *SPI* plays no part in the prediction of goals. Contrary to model one, when looking at the coefficients of each predictor in the second model (Table \@ref(tab:pois-res1)), the *SPI* predictor seems to become the most important predictor for goals. The coefficient for the calculated field *Rel SPI* is almost 21 time larger than all the other coefficients. Further evidence of *SPI's* importance in model two as seen in Table \@ref(tab:reg-imp) below.
+
+```{r reg-imp, results='asis'}
+kable(
+  rbind(p0i,p1i) %>%
+    select(predictors,weight),
+  digits = 4,
+  format = "latex",
+  booktabs = T,
+  caption = "Variable importance for each poisson model") %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F) %>%
+  pack_rows("Poisson: No interaction columns",1,4) %>%
+  pack_rows("Poisson: Interaction columns",5,6)
+
+```
+
+  How well does each model do at predicting goal? After splitting the data into training (80%) and test (20%) it's possible to get a sense of how well each model predicts goals on a random set of data. By checking the model on the test data, it seems that each model predicts exact goal scored for each team with very similar accuracy as seen in Table \@ref(tab:reg-res). 
+```{r reg-res, results='asis'}
+kable(reg_succ %>%
+        arrange(desc(Success)),
+  digits = 4,
+  format = "latex",
+  booktabs = T,
+  caption = "Success and Failure for each Poisson model"
+) %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F)
+```
+The first model that does not use interaction columns predicts goals about 2% better, not enough to claim a better model alone.
+ 
+  Looking at both the AIC and MAE metric below in Table \@ref(tab:pois-met),
+```{r pois-met,results='asis'}
+kable(
+  data.frame(
+    Model = c('Poisson: No interaction columns','Poisson: Interaction columns'),
+    MSE = c(metric(p_model0)[1],metric(p_model1)[1]),
+    MAE = c(metric(p_model0)[2],metric(p_model1)[2]),
+    RMSE = c(metric(p_model0)[3],metric(p_model1)[3]),
+    AIC = c(p_model0$aic,p_model1$aic)
+  ),
+  format = 'latex',
+  booktabs=T,
+  digits = 4,
+  caption = "Comparing no interaction model and interaction model metrics"
+) %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F)
+```
+the model that does not use relative variables preforms better. Given that we are predicting goals, MAE is the most important metric to consider. The MAE are fairly close for both models, but the model without the interactions preforms slightly better with an MAE of 0.64. Given that both models preformed relatively the same, it's appropriate to test out both models to create each team's $\lambda$s.
+
+### Creating $\lambda_1$ and $\lambda_2$ 
+
+  Using both models and the `predict()` function will give us the projected score for team1 and team2, which will be considered the $\lambda$s for each team. The formula for $\lambda_{1}$ using the first model takes uses the Off rating of team 1, the Def rating of team 2, the team 1's manager experience, and team 1's manager Off rating.
+\begin{equation}
+  \lambda_{1} = e^{-1.43+
+  0.49 \times \text{OffRating}_{1} +
+  0.56 \times \text{DefRating}_{2} +
+  0.12 \times \text{ManagerExperience}_{1} +
+  0.09 \times \text{ManagerOffRating}_{1}}
+\end{equation}
+The formula for calculating $\lambda_{1}$ using the interaction term model uses SPI rating of team 1,SPI rating of team 2,Expected Off rating of team 1, and expected Def rating of team 2, and manager Exp for team 1.
+\begin{equation}
+  \lambda_{1} = e^{-0.85 +
+  1.06 \times \frac{\text{SPI}_{1}}{\text{SPI}_{2}} +
+  0.05 \times \frac{\text{ManagerOff}_{1}}{\text{ManagerDef}_{2}}}
+\end{equation}
+For both models the formula for $\lambda_{2}$ uses the same columns as $\lambda_{1}$ but flipping the data from team 1 to team 2.
+
+  The two sets of $\lambda$s created are *proj0.1* and *proj0.2* and *proj1.1* and *proj1.2*. The projected scores starting with *proj0.* use the first model without interaction, while projected scores starting with *proj1.* were created using the second model with interactions. Implementing these formulas you get all the projected score columns as seen in the example below for AC Milan's game on 5/2/2022.
+```{r proj-ex, results='asis'}
+kable(
+  proj_df %>%
+    filter(date >= '2022-04-30' & team1 == "Milan") %>%
+    mutate(
+      row=row_number()
+    ) %>%
+    filter(row==1) %>%
+    select(-row,-gameid),
+  format = 'latex',
+  booktabs=T,
+  digits = 2,
+  caption = "Projected scores for the next Milan Serie A game"
+) %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F)
+```
+
+### Predicting games and scores
+
+  The example matrix in Table \@ref(tab:proj-ex1) shows the score percentages for the Milan vs Fiorentina game on May $1^{\text{st}}$ after simulating the game over 10,000 times using the projected scores from the interaction model.
+```{r proj-ex1, results='asis'}
+kable(
+  proj_ex,
+  format = "latex",
+  booktabs = T,
+  digits = 2,
+  caption = "Probability matrix for Milan v Fiorentina 5/1/22 using no interaction model") %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F) %>%
+  add_header_above(c("Milan"=1,"Fiorentina"=6)) %>%
+  column_spec(1, border_right = T, bold = T)
+```
+  
+  Adding up the bottom half of the matrix gives Milan's chance of winning the game, 44.33\%. While adding the top half of the matrix gives Fiorentina's chance of winning the game, 28.98\%. Finally, adding the diagonal of the matrix gives the chance the game ends in a tie, 26.69\%. Even though Milan is projected to win, the best final goal score prediction is a 1-1 draw with a 12.92\% chance of happening. To predict total goals or final score on a betting market, the best way to use this matrix is to combine the total outcome percentage with the highest goal scored for that outcome. In the case above that would mean a Milan 1-0 win, with an 11.84\% chance of occurring.
+  
+  Creating predicted outcomes for all Matchday 1 to Matchday 35 games and using the true game outcomes to check how well the each $\lambda$ predicted winners, the results look slightly better for the $\lambda$s created using the model without interacting the terms.
+```{r succ-tab, results='asis'}
+kable(
+  success[,c(2,3)],
+  format = 'latex',
+  booktabs = T,
+  caption = "$\\lambda$ Success Rate",
+  col.names = c("","Percent")) %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F) %>%
+  group_rows("No interaction model lambda",1,2) %>%
+  group_rows("Interaction model lambda",3,4)
+```
+Given that the no interaction model had the lower MAE, the better ability to predict goals, and created $\lambda$s with the highest correct win rate, it's makes sense to use the model that does not create interaction terms.
+
+# Results
+
+  In this section, the success rate using the FiveThirtyEight $\lambda$s and the $\lambda$s developed in this paper for each game of the 2021-2022 Serie A season was compared to determine the best method to creating $\lambda$s. To compare my results to those of FiveThirtyEight, I simulated their data using the *proj_score1* and *proj_score2* variables and got the following results:
+\newpage
+```{r proj-538, results='asis'}
+kable(
+  spi_proj %>%
+    filter(date>='2022-04-30') %>%
+    select(-gameid,-row),
+  format = 'latex',
+  booktabs=T,
+  digits = 2,
+  caption = "Serie A Matchday 35 FiveThirtyEight Predictions"
+) %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F)
+```
+The *win1*, *win2*, and *tie* column percentages where confirmed with the percentages that were seen on their [website](https://projects.fivethirtyeight.com/soccer-predictions/serie-a/) for the same dates. Below I compare those results to my predictions using my $\lambda$ method:
+```{r proj-35, results='asis'}
+kable(
+  diff_df %>% filter(date>='2022-04-30'),
+  format = 'latex',
+  booktabs=T,
+  digits = 2,
+  caption = "Matchday 35 Prediction Differences"
+) %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F)
+```
+
+  At a quick glance, there are some games that stand out compared to my predictions. Most notably, the game between Milan and Fiorentina on May $1^{\text{st}}$. FiveThirtyEight predicts Milan to win 59.14% of the time, while my prediction only has them winning 44.33% of the time, a difference of -14.88%.
+
+  This could be due to multiple things, but considering that all the win1 percentages are on average `r round(mean(diff_df$win1_diff),0)`% points lower, it's possible that FiveThirtyEight's home field advantage adjustment is higher than mine. Furthermore, not knowing the intricacies of how FiveThirtyEight comes up with their projected scores makes it impossible to compare the real reasons for these differences.
+
+\newpage
+
+```{r out-tab, results='asis'}
+kable(outcomes %>% filter(date >= '2022-04-30'),
+      format = "latex",
+      booktabs = T,
+      caption = "Outcome comparison",
+      col.names = c("date","team1","team2","True outcome","My outcome","538 outcome")) %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F)
+```
+  
+  Considering the results in Table \@ref(tab:out-tab) my projected scores and FiveThirtyEight's projected scores predicted the same outcomes for Matchday 35. Both were incorrect when predicting the Roma vs. Bologna game and the Atalanta vs. Salernitana game. Let's take a closer look at those games.
+  
+  Both my prediction and FiveThirtyEight's prediction were wrong about the Roma vs. Bologna game, meaning that there was no unluckiness to the results. Comparing the final score with the expected goals, both teams deserved to score 1 goal, meaning that a tie is a fair result. On the other hand, for the Atalanta vs. Salernitana game the predictions were much closer than they seem. My win percent of `r round(wrong_pred[2,3][[1]],2)`% and FiveThirtyEight's win percent of `r round(wrong_pred[4,3][[1]],2)`% were fairly accurate. Comparing the final score of `r wrong_pred[2,6][[1]]`-`r wrong_pred[2,7][[1]]` to the expected final score of `r round(wrong_pred[2,8][[1]],2)`-`r wrong_pred[2,9][[1]]` shows that Salernitana got lucky and Atalanta should have won the game.
+  
+# Discussion
+
+  This paper set out to accomplish what FiveThirtyEight has done and improve on it by considering whether the manager's experience has a role in goal scoring and, therefore, predicting the outcome of a game. The method produced in this paper utilizes manager experience when predicting goals for matches. The importance that the model assigns to manager experience is low, around `r round(p0i[4,3]*100,0)`%, even though the p-value was significant at the 0.10 level. The manager statistic that was more important than the manager experience was the manager offense rating at `r round(p0i[3,3]*100,0)`%. Manager offensive rating was also significant at the 0.10 level.^[Reference Table \@ref(tab:pois-res0)]
+  
+  Not knowing the mathematical methods behind FiveThirtyEight projected scores creates a barrier in improving their model. The method provided in this paper creates similar outcome percentages for each game, as seen in Table \@ref(tab:out-tab). The average difference for home team win percentages of `r round(mean(diff_df[,"win1_diff"][[1]]),2)`% and the away team win percentages of `r round(mean(diff_df[,"win2_diff"][[1]]),2)`%, suggests that the FiveThirtyEight method to develop a $\lambda$ includes some sort of adjustment for home field advantage, which this paper's method does not account for.
+\newpage
+```{r final-diff, results='asis'}
+kable(
+  f_out_suc,
+  format = 'latex',
+  booktabs = T,
+  caption = "Game outcome success failure for the 2021 season",
+  col.names = c("","")
+) %>%
+  kable_styling(latex_options = 'hold_position',
+                full_width = F) %>%
+  group_rows("Outcome using lambda method from paper",1,2) %>%
+  group_rows("Outcome using lambda from 538 ",3,4)
+```
+  
+Nevertheless, comparing the outcome results for the 2021-2022 season, up to and including Matchday 35, suggests that the model presented in this paper is comparable to that of FiveThirtyEights, with an outcome prediction success rate of 56% and 53% respectively.
+
+  In future research it would be interesting to see the effect of starting lineups on outcomes and goals scored. It would have been impossible to collect this data for this project as time and resources were limited. Additionally, it would be interesting to gain a better understanding of the FiveThirtyEight model to be able to compare these results more accurately. Nonetheless, the methods in this paper are a close comparison to FiveThirtyEight and are available to the public for knowledge sharing. With that ability it might be possible to create an even better model than FiveThirtyEight's that can be translated to a betting calculator or betting tool website potentially increasing interest in soccer betting across the United States.
+
+\newpage
+
+# References
+
+::: {#refs custom-style="Bibliography"}
+:::
+
+
+\newpage
+
+# (APPENDIX) Appendix {-}
+
+```{r child = "appendix-1.rmd"}
+```
+
